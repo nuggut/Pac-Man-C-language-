@@ -1,16 +1,10 @@
 #include "game.h"
 #include <stdio.h>
-#include <stdint.h>
 
 static uint8_t pacman_row = 7;
 static uint8_t pacman_column = 10;
 #define BOARD_WIDTH 21
 #define BOARD_HEIGHT 11
-#define BOARD_SIZE (BOARD_WIDTH * BOARD_HEIGHT)
-#define UP 0
-#define DOWN 1
-#define LEFT 2
-#define RIGHT 3
 
 static const char board[BOARD_HEIGHT][BOARD_WIDTH] = {
     "#####################",
@@ -26,31 +20,47 @@ static const char board[BOARD_HEIGHT][BOARD_WIDTH] = {
     "#####################"
 };
 
-void pacman_move(uint8_t direction)
+uint8_t pacman_move(PacmanDirection direction)
 {
     uint8_t row = pacman_row;
     uint8_t column = pacman_column;
 
     switch (direction) {
-        case UP: // up
+        case PACMAN_UP:
             row--;
             break;
-        case DOWN: // down
+        case PACMAN_DOWN:
             row++;
             break;
-        case LEFT: // left
+        case PACMAN_LEFT:
             column--;
             break;
-        case RIGHT: // right
+        case PACMAN_RIGHT:
             column++;
             break;
+        default:
+            return 0;
     }
 
     if (row < BOARD_HEIGHT && column < BOARD_WIDTH && board[row][column] != '#') {
         pacman_row = row;
         pacman_column = column;
+        return 1;
     }
-    return;
+
+    return 0;
+}
+
+void pacman_reset(void)
+{
+    pacman_row = 7;
+    pacman_column = 10;
+}
+
+void pacman_get_position(uint8_t *row, uint8_t *column)
+{
+    *row = pacman_row;
+    *column = pacman_column;
 }
 
 void game_run(void)
