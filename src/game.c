@@ -28,10 +28,11 @@ void game_run(void)
 
     puts("PAC-MAN C prototype");
     puts("-------------------");
-
-    for (size_t row = 0; row < row_count; ++row) {
-        puts(board[row]);
+    for (unsigned char row = 0; row < BOARD_HEIGHT; row++) {
+        for (unsigned char column = 0; column < BOARD_WIDTH; column++) {
+            putchar(board[row][column]);
+        }
+    putchar('\n');
     }
-
     puts("\nNext step: add input and movement.");
 }
