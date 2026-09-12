@@ -39,7 +39,7 @@ uint8_t pacman_move(PacmanDirection direction)
             column++;
             break;
         default:
-            return 0;
+            return PACMAN_NONE;
     }
 
     if (row < BOARD_HEIGHT && column < BOARD_WIDTH && board[row][column] != '#') {
@@ -50,6 +50,28 @@ uint8_t pacman_move(PacmanDirection direction)
 
     return 0;
 }
+
+PacmanDirection input_read_direction(void)
+{
+    char c = getchar();
+    switch (c) {
+        case 'w':
+        case 'W':
+            return PACMAN_UP;
+        case 's':
+        case 'S':
+            return PACMAN_DOWN;
+        case 'a':
+        case 'A':
+            return PACMAN_LEFT;
+        case 'd':
+        case 'D':
+            return PACMAN_RIGHT;
+        default:
+            return PACMAN_NONE;
+    }
+}
+
 
 void pacman_reset(void)
 {

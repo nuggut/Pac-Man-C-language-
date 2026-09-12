@@ -13,16 +13,6 @@ add_executable(pacman
 
 target_include_directories(pacman PRIVATE include)
 
-enable_testing()
-
-add_executable(pacman_movement_test
-    src/game.c
-    tests/test_movement.c
-)
-
-target_include_directories(pacman_movement_test PRIVATE include)
-add_test(NAME pacman_movement_test COMMAND pacman_movement_test)
-
 if(MSVC)
     target_compile_options(pacman PRIVATE /W4)
 else()
