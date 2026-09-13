@@ -2,6 +2,7 @@
 
 static uint8_t pacman_row = 23;
 static uint8_t pacman_column = 13;
+static PacmanDirection pacman_direction = PACMAN_NONE;
 static uint8_t pellets[BOARD_HEIGHT][BOARD_WIDTH];
 static uint16_t pellets_remaining;
 static uint32_t pacman_score;
@@ -60,6 +61,9 @@ static const GhostState ghost_start_positions[GHOST_COUNT] = {
 
 #define GHOST_EXIT_ROW 8
 #define GHOST_EXIT_COLUMN 12
+#define GHOST_CLYDE_CORNER_ROW (BOARD_HEIGHT - 2)
+#define GHOST_CLYDE_CORNER_COLUMN 1
+#define GHOST_CLYDE_CHASE_DISTANCE 8
 
 static void collect_pellet(uint8_t row, uint8_t column)
 {
@@ -149,6 +153,195 @@ static uint8_t next_position(uint8_t current_row, uint8_t current_column,
     return tile_is_walkable(*next_row, *next_column);
 }
 
+static void direction_vector(PacmanDirection direction, int16_t *row,
+                             int16_t *column)
+{
+    *row = 0;
+    *column = 0;
+
+    switch (direction) {
+        case PACMAN_UP:
+            *row = -1;
+            break;
+        case PACMAN_DOWN:
+            *row = 1;
+            break;
+        case PACMAN_LEFT:
+            *column = -1;
+            break;
+        case PACMAN_RIGHT:
+            *column = 1;
+            break;
+        default:
+            break;
+    }
+}
+
+static void ghost_target(uint8_t ghost, int16_t *target_row,
+                         int16_t *target_column)
+{
+    int16_t direction_row;
+    int16_t direction_column;
+    int16_t distance;
+
+    direction_vector(pacman_direction, &direction_row,
+                     &direction_column);
+    distance = (int16_t)(pacman_row > ghosts[ghost].row
+                         ? pacman_row - ghosts[ghost].row
+                         : ghosts[ghost].row - pacman_row) +
+               (int16_t)(pacman_column > ghosts[ghost].column
+                         ? pacman_column - ghosts[ghost].column
+                         : ghosts[ghost].column - pacman_column);
+
+    switch (ghost) {
+        case 0:
+            *target_row = pacman_row;
+            *target_column = pacman_column;
+            break;
+        case 1:
+            *target_row = (int16_t)pacman_row + direction_row * 4;
+            *target_column = (int16_t)pacman_column + direction_column * 4;
+            break;
+        case 2:
+            *target_row = (int16_t)pacman_row + direction_row * 2;
+            *target_column = (int16_t)pacman_column + direction_column * 2;
+            *target_row = *target_row * 2 - ghosts[0].row;
+            *target_column = *target_column * 2 - ghosts[0].column;
+            break;
+        case 3:
+            if (distance >= GHOST_CLYDE_CHASE_DISTANCE) {
+                *target_row = pacman_row;
+                *target_column = pacman_column;
+            } else {
+                *target_row = GHOST_CLYDE_CORNER_ROW;
+                *target_column = GHOST_CLYDE_CORNER_COLUMN;
+            }
+            break;
+        default:
+            *target_row = pacman_row;
+            *target_column = pacman_column;
+            break;
+    }
+}
+
+static PacmanDirection ghost_release_direction(uint8_t row, uint8_t column)
+{
+    if (row > 12) {
+        return PACMAN_UP;
+    }
+    if (row == 12 && column < 13) {
+        return PACMAN_RIGHT;
+    }
+    if (row == 12 && column > 13) {
+        return PACMAN_LEFT;
+    }
+    if (row == 11 && column > 12) {
+        return PACMAN_LEFT;
+    }
+    if (column == 13 || column == 12) {
+        return PACMAN_UP;
+    }
+
+    return PACMAN_NONE;
+}
+
+static PacmanDirection ghost_path_direction(uint8_t start_row,
+                                            uint8_t start_column,
+                                            int16_t target_row,
+                                            int16_t target_column)
+{
+    static const PacmanDirection directions[] = {
+        PACMAN_UP, PACMAN_LEFT, PACMAN_DOWN, PACMAN_RIGHT
+    };
+    uint8_t visited[BOARD_HEIGHT][BOARD_WIDTH] = {{0}};
+    PacmanDirection first_direction[BOARD_HEIGHT][BOARD_WIDTH];
+    uint8_t queue_rows[BOARD_HEIGHT * BOARD_WIDTH];
+    uint8_t queue_columns[BOARD_HEIGHT * BOARD_WIDTH];
+    uint16_t queue_head = 0;
+    uint16_t queue_tail = 0;
+    uint8_t goal_row;
+    uint8_t goal_column;
+
+    if (target_row < 0) {
+        goal_row = 0;
+    } else if (target_row >= BOARD_HEIGHT) {
+        goal_row = BOARD_HEIGHT - 1;
+    } else {
+        goal_row = (uint8_t)target_row;
+    }
+    if (target_column < 0) {
+        goal_column = 0;
+    } else if (target_column >= BOARD_WIDTH) {
+        goal_column = BOARD_WIDTH - 1;
+    } else {
+        goal_column = (uint8_t)target_column;
+    }
+
+    if (!tile_is_walkable(goal_row, goal_column)) {
+        uint16_t closest_distance = UINT16_MAX;
+
+        for (uint8_t row = 0; row < BOARD_HEIGHT; row++) {
+            for (uint8_t column = 0; column < BOARD_WIDTH; column++) {
+                uint16_t distance;
+
+                if (!tile_is_walkable(row, column)) {
+                    continue;
+                }
+                distance = (uint16_t)(row > goal_row
+                                      ? row - goal_row : goal_row - row) +
+                           (uint16_t)(column > goal_column
+                                      ? column - goal_column
+                                      : goal_column - column);
+                if (distance < closest_distance) {
+                    closest_distance = distance;
+                    goal_row = row;
+                    goal_column = column;
+                }
+            }
+        }
+    }
+
+    visited[start_row][start_column] = 1;
+    first_direction[start_row][start_column] = PACMAN_NONE;
+    queue_rows[queue_tail] = start_row;
+    queue_columns[queue_tail] = start_column;
+    queue_tail++;
+
+    while (queue_head < queue_tail) {
+        uint8_t row = queue_rows[queue_head];
+        uint8_t column = queue_columns[queue_head];
+        queue_head++;
+
+        if (row == goal_row && column == goal_column) {
+            return first_direction[row][column];
+        }
+
+        for (uint8_t direction_index = 0;
+             direction_index < sizeof(directions) / sizeof(directions[0]);
+             direction_index++) {
+            uint8_t next_row;
+            uint8_t next_column;
+            PacmanDirection direction = directions[direction_index];
+
+            if (!next_position(row, column, direction, &next_row,
+                               &next_column, 0) ||
+                visited[next_row][next_column]) {
+                continue;
+            }
+
+            visited[next_row][next_column] = 1;
+            first_direction[next_row][next_column] =
+                row == start_row && column == start_column
+                    ? direction : first_direction[row][column];
+            queue_rows[queue_tail] = next_row;
+            queue_columns[queue_tail] = next_column;
+            queue_tail++;
+        }
+    }
+
+    return PACMAN_NONE;
+}
+
 uint8_t pacman_move(PacmanDirection direction)
 {
     uint8_t row = pacman_row;
@@ -161,6 +354,7 @@ uint8_t pacman_move(PacmanDirection direction)
     if (next_position(row, column, direction, &next_row, &next_column, 0)) {
         pacman_row = next_row;
         pacman_column = next_column;
+        pacman_direction = direction;
         collect_pellet(next_row, next_column);
         return 1;
     }
@@ -198,6 +392,7 @@ void pacman_reset(void)
 {
     pacman_row = 23;
     pacman_column = 13;
+    pacman_direction = PACMAN_NONE;
 }
 
 void pacman_lose_life(void)
@@ -226,57 +421,62 @@ void ghosts_reset(void)
 
 void ghosts_update(void)
 {
-    static const PacmanDirection directions[] = {
-        PACMAN_UP, PACMAN_LEFT, PACMAN_DOWN, PACMAN_RIGHT
-    };
-
     ensure_game_initialized();
 
+    uint8_t releasing_ghost = GHOST_COUNT;
     for (uint8_t ghost = 0; ghost < GHOST_COUNT; ghost++) {
+        if (!ghosts[ghost].released) {
+            releasing_ghost = ghost;
+            break;
+        }
+    }
+
+    for (uint8_t ghost = 0; ghost < GHOST_COUNT; ghost++) {
+        if (!ghosts[ghost].released && ghost != releasing_ghost) {
+            continue;
+        }
+
+        if (!ghosts[ghost].released) {
+            PacmanDirection release_direction = ghost_release_direction(
+                ghosts[ghost].row, ghosts[ghost].column);
+            if (release_direction == PACMAN_UP && ghosts[ghost].row > 12) {
+                ghosts[ghost].row--;
+            } else if (release_direction == PACMAN_RIGHT) {
+                ghosts[ghost].column++;
+            } else if (release_direction == PACMAN_LEFT) {
+                ghosts[ghost].column--;
+            } else if (release_direction == PACMAN_UP &&
+                       ghosts[ghost].row > GHOST_EXIT_ROW) {
+                ghosts[ghost].row--;
+            }
+            ghosts[ghost].direction = release_direction;
+
+            if (ghosts[ghost].row == GHOST_EXIT_ROW &&
+                ghosts[ghost].column == GHOST_EXIT_COLUMN) {
+                ghosts[ghost].released = 1;
+            }
+            continue;
+        }
+
         uint8_t best_row = ghosts[ghost].row;
         uint8_t best_column = ghosts[ghost].column;
-        uint16_t best_distance = UINT16_MAX;
         PacmanDirection best_direction = ghosts[ghost].direction;
-        uint8_t target_row = ghosts[ghost].released
-                             ? pacman_row : GHOST_EXIT_ROW;
-        uint8_t target_column = ghosts[ghost].released
-                                ? pacman_column : GHOST_EXIT_COLUMN;
+        int16_t target_row;
+        int16_t target_column;
 
-        for (uint8_t direction_index = 0;
-             direction_index < sizeof(directions) / sizeof(directions[0]);
-             direction_index++) {
-            uint8_t next_row;
-            uint8_t next_column;
-            uint16_t distance;
+        ghost_target(ghost, &target_row, &target_column);
 
-            if (!next_position(ghosts[ghost].row, ghosts[ghost].column,
-                               directions[direction_index], &next_row,
-                               &next_column, !ghosts[ghost].released)) {
-                continue;
-            }
-
-            distance = (uint16_t)(next_row > target_row
-                                  ? next_row - target_row
-                                  : target_row - next_row) +
-                       (uint16_t)(next_column > target_column
-                                  ? next_column - target_column
-                                  : target_column - next_column);
-            if (distance < best_distance) {
-                best_distance = distance;
-                best_row = next_row;
-                best_column = next_column;
-                best_direction = directions[direction_index];
-            }
+        best_direction = ghost_path_direction(ghosts[ghost].row,
+                                              ghosts[ghost].column,
+                                              target_row, target_column);
+        if (best_direction != PACMAN_NONE) {
+            next_position(ghosts[ghost].row, ghosts[ghost].column,
+                          best_direction, &best_row, &best_column, 0);
         }
 
         ghosts[ghost].row = best_row;
         ghosts[ghost].column = best_column;
         ghosts[ghost].direction = best_direction;
-        if (!ghosts[ghost].released &&
-            best_row == GHOST_EXIT_ROW &&
-            best_column == GHOST_EXIT_COLUMN) {
-            ghosts[ghost].released = 1;
-        }
     }
 }
 

@@ -71,6 +71,19 @@ int main(void)
         return 1;
     }
 
+    ghosts_reset();
+    for (int update = 0; update < 100; update++) {
+        ghosts_update();
+    }
+    for (uint8_t ghost = 0; ghost < GHOST_COUNT; ghost++) {
+        if (!ghost_is_released(ghost)) {
+            ghost_get_position(ghost, &ghost_row, &ghost_column);
+            printf("ghost %u stuck at (%u, %u)\n", ghost,
+                   ghost_row, ghost_column);
+            return 1;
+        }
+    }
+
     pacman_reset();
     if (pacman_move(PACMAN_UP) || !expect_position(23, 13)) {
         return 1;
