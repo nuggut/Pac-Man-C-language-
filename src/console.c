@@ -1,6 +1,7 @@
 #include "console.h"
 #include "game.h"
 #include <conio.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <windows.h>
 
@@ -52,6 +53,21 @@ static PacmanDirection input_read_direction(void)
     }
 }
 
+static int ghost_at_position(uint8_t row, uint8_t column)
+{
+    for (uint8_t ghost = 0; ghost < GHOST_COUNT; ghost++) {
+        uint8_t ghost_row;
+        uint8_t ghost_column;
+
+        ghost_get_position(ghost, &ghost_row, &ghost_column);
+        if (ghost_row == row && ghost_column == column) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 void game_run(void)
 {
     PacmanDirection current_direction = PACMAN_NONE;
@@ -60,18 +76,26 @@ void game_run(void)
     uint8_t pacman_row;
     uint8_t pacman_column;
 
-    pacman_reset();
+    pacman_start_game();
 
     for (;;) {
         printf("\x1b[2J\x1b[H");
-        puts("PAC-MAN C prototype");
-        puts("WASD or arrow keys: move    Q or Esc: quit");
+        printf("Score: %" PRIu32 "  Lives: %u  Pellets: %u\n",
+               pacman_get_score(), pacman_get_lives(),
+               pacman_get_pellets_remaining());
+        if (pacman_level_complete()) {
+            puts("LEVEL COMPLETE!");
+        } else if (pacman_get_lives() == 0) {
+            puts("GAME OVER!");
+        }
         pacman_get_position(&pacman_row, &pacman_column);
 
         for (uint8_t row = 0; row < BOARD_HEIGHT; row++) {
             for (uint8_t column = 0; column < BOARD_WIDTH; column++) {
                 if (row == pacman_row && column == pacman_column) {
                     putchar('P');
+                } else if (ghost_at_position(row, column)) {
+                    putchar('G');
                 } else {
                     putchar(game_get_tile(row, column));
                 }
@@ -87,11 +111,21 @@ void game_run(void)
             requested_direction = new_direction;
         }
 
-        if (requested_direction != PACMAN_NONE &&
-            pacman_move(requested_direction)) {
-            current_direction = requested_direction;
-        } else {
-            pacman_move(current_direction);
+        if (!pacman_level_complete() && pacman_get_lives() > 0) {
+            if (requested_direction != PACMAN_NONE &&
+                pacman_move(requested_direction)) {
+                current_direction = requested_direction;
+            } else {
+                pacman_move(current_direction);
+            }
+
+            ghosts_update();
+            if (ghosts_collide_with_pacman()) {
+                pacman_lose_life();
+                ghosts_reset();
+                current_direction = PACMAN_NONE;
+                requested_direction = PACMAN_NONE;
+            }
         }
         Sleep(150);
     }

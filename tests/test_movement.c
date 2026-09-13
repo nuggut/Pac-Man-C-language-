@@ -18,12 +18,56 @@ static int expect_position(uint8_t expected_row, uint8_t expected_column)
 
 int main(void)
 {
+    pacman_start_game();
+    if (pacman_get_score() != 10 ||
+        pacman_get_lives() != PACMAN_STARTING_LIVES ||
+        pacman_get_pellets_remaining() == 0 ||
+        pacman_level_complete()) {
+        return 1;
+    }
+
     pacman_reset();
     if (!expect_position(23, 13)) {
         return 1;
     }
 
     if (!pacman_move(PACMAN_LEFT) || !expect_position(23, 12)) {
+        return 1;
+    }
+    if (pacman_get_score() != 20 || game_get_tile(23, 12) != ' ') {
+        return 1;
+    }
+
+    pacman_lose_life();
+    if (pacman_get_lives() != PACMAN_STARTING_LIVES - 1 ||
+        !expect_position(23, 13)) {
+        return 1;
+    }
+
+    uint8_t ghost_row;
+    uint8_t ghost_column;
+    ghost_get_position(0, &ghost_row, &ghost_column);
+    if (ghost_row != 14 || ghost_column != 13 ||
+        ghosts_collide_with_pacman()) {
+        return 1;
+    }
+    ghosts_update();
+    ghost_get_position(0, &ghost_row, &ghost_column);
+    if (ghost_row >= BOARD_HEIGHT || ghost_column >= BOARD_WIDTH ||
+        game_get_tile(ghost_row, ghost_column) == '#') {
+        return 1;
+    }
+
+    ghosts_reset();
+    for (int update = 0; update < 6; update++) {
+        ghosts_update();
+    }
+    if (ghost_is_released(0)) {
+        return 1;
+    }
+    ghosts_update();
+    ghost_get_position(0, &ghost_row, &ghost_column);
+    if (!ghost_is_released(0) || ghost_row != 8 || ghost_column != 12) {
         return 1;
     }
 
