@@ -10,6 +10,7 @@ enable_testing()
 
 add_executable(pacman
     src/game.c
+    src/console.c
     src/main.c
 )
 

@@ -42,6 +42,28 @@ int main(void)
         return 1;
     }
 
+    pacman_reset();
+    for (int move = 0; move < 7; move++) {
+        if (!pacman_move(PACMAN_LEFT)) {
+            return 1;
+        }
+    }
+    for (int move = 0; move < 9; move++) {
+        if (!pacman_move(PACMAN_UP)) {
+            return 1;
+        }
+    }
+    for (int move = 0; move < 6; move++) {
+        if (!pacman_move(PACMAN_LEFT)) {
+            return 1;
+        }
+    }
+    if (!expect_position(14, 0) ||
+        !pacman_move(PACMAN_LEFT) || !expect_position(14, 27) ||
+        !pacman_move(PACMAN_RIGHT) || !expect_position(14, 0)) {
+        return 1;
+    }
+
     puts("movement tests passed");
     return 0;
 }
