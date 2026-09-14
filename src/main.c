@@ -1,7 +1,8 @@
-#include "game.h"
+#include "console.h"
 
 int main(void)
 {
     game_run();
     return 0;
+    
 }

@@ -18,4 +18,12 @@ cmake --build build-mingw
 .\build-mingw\pacman.exe
 ```
 
-The current version is a console prototype that displays the initial board. Future steps will add input, movement, collision rules, pellets, ghosts, scoring, and a graphical interface.
+The current version is a playable console game with:
+
+- WASD or arrow-key movement
+- Pellet and power-pellet scoring
+- Three lives and ghost collisions
+- Ghost release, targeting, and tunnel wrapping
+- A level-complete state when all pellets are collected
+
+Press `q` or `Esc` to quit. The game logic is kept in `src/game.c`, separate from the Windows console renderer in `src/console.c`.
