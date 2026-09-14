@@ -34,7 +34,8 @@ int main(void)
     if (!pacman_move(PACMAN_LEFT) || !expect_position(23, 12)) {
         return 1;
     }
-    if (pacman_get_score() != 20 || game_get_tile(23, 12) != ' ') {
+    if (pacman_get_score() != 20 ||
+        game_get_tile(23, 12) != PACMAN_TILE_EMPTY) {
         return 1;
     }
 
@@ -54,11 +55,14 @@ int main(void)
     ghosts_update();
     ghost_get_position(0, &ghost_row, &ghost_column);
     if (ghost_row >= BOARD_HEIGHT || ghost_column >= BOARD_WIDTH ||
-        game_get_tile(ghost_row, ghost_column) == '#') {
+        game_get_tile(ghost_row, ghost_column) == PACMAN_TILE_WALL) {
         return 1;
     }
 
     ghosts_reset();
+    if (ghost_get_status(0) != GHOST_STATUS_NORMAL) {
+        return 1;
+    }
     for (int update = 0; update < 6; update++) {
         ghosts_update();
     }
