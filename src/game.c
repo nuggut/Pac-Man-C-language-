@@ -14,9 +14,12 @@ typedef struct {
     uint8_t column;
     PacmanDirection direction;
     uint8_t released;
+    GhostStatus status;
 } GhostState;
 
 static GhostState ghosts[GHOST_COUNT];
+static uint8_t frightened_ticks;
+static uint8_t ghosts_eaten;
 
 static const char board[BOARD_HEIGHT][BOARD_WIDTH + 1] = {
     "############################",
@@ -53,10 +56,10 @@ static const char board[BOARD_HEIGHT][BOARD_WIDTH + 1] = {
 };
 
 static const GhostState ghost_start_positions[GHOST_COUNT] = {
-    {14, 13, PACMAN_LEFT, 0},
-    {14, 14, PACMAN_RIGHT, 0},
-    {14, 12, PACMAN_LEFT, 0},
-    {14, 15, PACMAN_RIGHT, 0}
+    {14, 13, PACMAN_LEFT, 0, GHOST_STATUS_NORMAL},
+    {14, 14, PACMAN_RIGHT, 0, GHOST_STATUS_NORMAL},
+    {14, 12, PACMAN_LEFT, 0, GHOST_STATUS_NORMAL},
+    {14, 15, PACMAN_RIGHT, 0, GHOST_STATUS_NORMAL}
 };
 
 #define GHOST_EXIT_ROW 8
@@ -64,6 +67,19 @@ static const GhostState ghost_start_positions[GHOST_COUNT] = {
 #define GHOST_CLYDE_CORNER_ROW (BOARD_HEIGHT - 2)
 #define GHOST_CLYDE_CORNER_COLUMN 1
 #define GHOST_CLYDE_CHASE_DISTANCE 8
+
+static void start_frightened_mode(void)
+{
+    frightened_ticks = GHOST_FRIGHTENED_TICKS;
+    ghosts_eaten = 0;
+
+    for (uint8_t ghost = 0; ghost < GHOST_COUNT; ghost++) {
+        if (ghosts[ghost].released &&
+            ghosts[ghost].status != GHOST_STATUS_EATEN) {
+            ghosts[ghost].status = GHOST_STATUS_FLEEING;
+        }
+    }
+}
 
 static void collect_pellet(uint8_t row, uint8_t column)
 {
@@ -75,6 +91,7 @@ static void collect_pellet(uint8_t row, uint8_t column)
         pacman_score += 50;
         pellets[row][column] = 0;
         pellets_remaining--;
+        start_frightened_mode();
     }
 }
 
@@ -85,20 +102,28 @@ static void ensure_game_initialized(void)
     }
 }
 
-char game_get_tile(uint8_t row, uint8_t column)
+PacmanTile game_get_tile(uint8_t row, uint8_t column)
 {
     ensure_game_initialized();
 
     if (row >= BOARD_HEIGHT || column >= BOARD_WIDTH) {
-        return ' ';
+        return PACMAN_TILE_EMPTY;
     }
 
-    if ((board[row][column] == '.' || board[row][column] == 'o') &&
-        pellets[row][column] == 0) {
-        return ' ';
+    if (board[row][column] == '#') {
+        return PACMAN_TILE_WALL;
+    }
+    if (board[row][column] == '-') {
+        return PACMAN_TILE_GATE;
+    }
+    if (pellets[row][column] == 1) {
+        return PACMAN_TILE_PELLET;
+    }
+    if (pellets[row][column] == 2) {
+        return PACMAN_TILE_POWER_PELLET;
     }
 
-    return board[row][column];
+    return PACMAN_TILE_EMPTY;
 }
 
 static uint8_t tile_is_walkable(uint8_t row, uint8_t column)
@@ -186,6 +211,13 @@ static void ghost_target(uint8_t ghost, int16_t *target_row,
 
     direction_vector(pacman_direction, &direction_row,
                      &direction_column);
+
+    if (ghosts[ghost].status == GHOST_STATUS_FLEEING ||
+        ghosts[ghost].status == GHOST_STATUS_FLICKERING) {
+        *target_row = pacman_row < BOARD_HEIGHT / 2 ? BOARD_HEIGHT - 2 : 1;
+        *target_column = pacman_column < BOARD_WIDTH / 2 ? BOARD_WIDTH - 2 : 1;
+        return;
+    }
     distance = (int16_t)(pacman_row > ghosts[ghost].row
                          ? pacman_row - ghosts[ghost].row
                          : ghosts[ghost].row - pacman_row) +
@@ -243,6 +275,30 @@ static PacmanDirection ghost_release_direction(uint8_t row, uint8_t column)
     }
 
     return PACMAN_NONE;
+}
+
+static void update_frightened_mode(void)
+{
+    if (frightened_ticks == 0) {
+        return;
+    }
+
+    frightened_ticks--;
+    for (uint8_t ghost = 0; ghost < GHOST_COUNT; ghost++) {
+        if (ghosts[ghost].status == GHOST_STATUS_FLEEING ||
+            ghosts[ghost].status == GHOST_STATUS_FLICKERING) {
+            ghosts[ghost].status = frightened_ticks <= GHOST_FLICKER_TICKS
+                ? GHOST_STATUS_FLICKERING : GHOST_STATUS_FLEEING;
+        }
+    }
+
+    if (frightened_ticks == 0) {
+        for (uint8_t ghost = 0; ghost < GHOST_COUNT; ghost++) {
+            if (ghosts[ghost].status == GHOST_STATUS_FLICKERING) {
+                ghosts[ghost].status = GHOST_STATUS_NORMAL;
+            }
+        }
+    }
 }
 
 static PacmanDirection ghost_path_direction(uint8_t start_row,
@@ -367,6 +423,8 @@ void pacman_start_game(void)
     pellets_remaining = 0;
     pacman_score = 0;
     pacman_lives = PACMAN_STARTING_LIVES;
+    frightened_ticks = 0;
+    ghosts_eaten = 0;
 
     for (uint8_t row = 0; row < BOARD_HEIGHT; row++) {
         for (uint8_t column = 0; column < BOARD_WIDTH; column++) {
@@ -414,14 +472,18 @@ void pacman_get_position(uint8_t *row, uint8_t *column)
 
 void ghosts_reset(void)
 {
+    frightened_ticks = 0;
+    ghosts_eaten = 0;
     for (uint8_t ghost = 0; ghost < GHOST_COUNT; ghost++) {
         ghosts[ghost] = ghost_start_positions[ghost];
+        ghosts[ghost].status = GHOST_STATUS_NORMAL;
     }
 }
 
 void ghosts_update(void)
 {
     ensure_game_initialized();
+    update_frightened_mode();
 
     uint8_t releasing_ghost = GHOST_COUNT;
     for (uint8_t ghost = 0; ghost < GHOST_COUNT; ghost++) {
@@ -433,6 +495,12 @@ void ghosts_update(void)
 
     for (uint8_t ghost = 0; ghost < GHOST_COUNT; ghost++) {
         if (!ghosts[ghost].released && ghost != releasing_ghost) {
+            continue;
+        }
+
+        if (ghosts[ghost].status == GHOST_STATUS_EATEN) {
+            ghosts[ghost] = ghost_start_positions[ghost];
+            ghosts[ghost].status = GHOST_STATUS_NORMAL;
             continue;
         }
 
@@ -494,6 +562,17 @@ void ghost_get_position(uint8_t ghost, uint8_t *row, uint8_t *column)
     *column = ghosts[ghost].column;
 }
 
+GhostStatus ghost_get_status(uint8_t ghost)
+{
+    ensure_game_initialized();
+
+    if (ghost >= GHOST_COUNT) {
+        return GHOST_STATUS_NORMAL;
+    }
+
+    return ghosts[ghost].status;
+}
+
 uint8_t ghost_is_released(uint8_t ghost)
 {
     ensure_game_initialized();
@@ -513,6 +592,34 @@ uint8_t ghosts_collide_with_pacman(void)
         if (ghosts[ghost].row == pacman_row &&
             ghosts[ghost].column == pacman_column) {
             return 1;
+        }
+    }
+
+    return 0;
+}
+
+uint32_t ghosts_handle_collision(void)
+{
+    for (uint8_t ghost = 0; ghost < GHOST_COUNT; ghost++) {
+        if (ghosts[ghost].row != pacman_row ||
+            ghosts[ghost].column != pacman_column) {
+            continue;
+        }
+
+        if (ghosts[ghost].status == GHOST_STATUS_FLEEING ||
+            ghosts[ghost].status == GHOST_STATUS_FLICKERING) {
+            ghosts_eaten++;
+            pacman_score += 100U * ghosts_eaten;
+            ghosts[ghost].status = GHOST_STATUS_EATEN;
+            ghosts[ghost].row = ghost_start_positions[ghost].row;
+            ghosts[ghost].column = ghost_start_positions[ghost].column;
+            ghosts[ghost].direction = ghost_start_positions[ghost].direction;
+            ghosts[ghost].released = 1;
+            return 100U * ghosts_eaten;
+        }
+
+        if (ghosts[ghost].status == GHOST_STATUS_NORMAL) {
+            return 0;
         }
     }
 

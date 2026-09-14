@@ -68,11 +68,44 @@ static int ghost_at_position(uint8_t row, uint8_t column)
     return 0;
 }
 
+static char tile_to_character(PacmanTile tile)
+{
+    switch (tile) {
+        case PACMAN_TILE_WALL:
+            return '#';
+        case PACMAN_TILE_PELLET:
+            return '.';
+        case PACMAN_TILE_POWER_PELLET:
+            return 'o';
+        case PACMAN_TILE_GATE:
+            return '-';
+        default:
+            return ' ';
+    }
+}
+
+static char ghost_to_character(GhostStatus status)
+{
+    switch (status) {
+        case GHOST_STATUS_FLEEING:
+            return 'F';
+        case GHOST_STATUS_FLICKERING:
+            return 'f';
+        case GHOST_STATUS_EATEN:
+            return 'e';
+        default:
+            return 'G';
+    }
+}
+
 void game_run(void)
 {
     PacmanDirection current_direction = PACMAN_NONE;
     PacmanDirection requested_direction = PACMAN_NONE;
     PacmanDirection new_direction;
+    uint8_t pacman_moved;
+    uint8_t pacman_started = 0;
+    uint32_t score_popup = 0;
     uint8_t pacman_row;
     uint8_t pacman_column;
 
@@ -83,6 +116,10 @@ void game_run(void)
         printf("Score: %" PRIu32 "  Lives: %u  Pellets: %u\n",
                pacman_get_score(), pacman_get_lives(),
                pacman_get_pellets_remaining());
+        if (score_popup != 0) {
+            printf("Ghost eaten! +%" PRIu32 "\n", score_popup);
+            score_popup = 0;
+        }
         if (pacman_level_complete()) {
             puts("LEVEL COMPLETE!");
         } else if (pacman_get_lives() == 0) {
@@ -95,9 +132,18 @@ void game_run(void)
                 if (row == pacman_row && column == pacman_column) {
                     putchar('P');
                 } else if (ghost_at_position(row, column)) {
-                    putchar('G');
+                    for (uint8_t ghost = 0; ghost < GHOST_COUNT; ghost++) {
+                        uint8_t ghost_row;
+                        uint8_t ghost_column;
+
+                        ghost_get_position(ghost, &ghost_row, &ghost_column);
+                        if (ghost_row == row && ghost_column == column) {
+                            putchar(ghost_to_character(ghost_get_status(ghost)));
+                            break;
+                        }
+                    }
                 } else {
-                    putchar(game_get_tile(row, column));
+                    putchar(tile_to_character(game_get_tile(row, column)));
                 }
             }
             putchar('\n');
@@ -112,19 +158,30 @@ void game_run(void)
         }
 
         if (!pacman_level_complete() && pacman_get_lives() > 0) {
+            pacman_moved = 0;
             if (requested_direction != PACMAN_NONE &&
                 pacman_move(requested_direction)) {
                 current_direction = requested_direction;
-            } else {
-                pacman_move(current_direction);
+                pacman_moved = 1;
+            } else if (pacman_move(current_direction)) {
+                pacman_moved = 1;
             }
 
-            ghosts_update();
-            if (ghosts_collide_with_pacman()) {
-                pacman_lose_life();
-                ghosts_reset();
-                current_direction = PACMAN_NONE;
-                requested_direction = PACMAN_NONE;
+            if (pacman_moved) {
+                pacman_started = 1;
+            }
+            if (pacman_started) {
+                ghosts_update();
+                if (ghosts_collide_with_pacman()) {
+                    score_popup = ghosts_handle_collision();
+                    if (score_popup == 0) {
+                        pacman_lose_life();
+                        ghosts_reset();
+                        current_direction = PACMAN_NONE;
+                        requested_direction = PACMAN_NONE;
+                        pacman_started = 0;
+                    }
+                }
             }
         }
         Sleep(150);
