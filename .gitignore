@@ -1,0 +1,4 @@
+build/
+build-mingw/
+build-arm/
+.vscode/*.log
