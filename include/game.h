@@ -7,8 +7,12 @@
 #define BOARD_TUNNEL_ROW 14
 #define PACMAN_STARTING_LIVES 3
 #define GHOST_COUNT 4
-#define GHOST_FRIGHTENED_TICKS 67
-#define GHOST_FLICKER_TICKS 20
+/* One tick is 50 ms, so 200 ticks is the classic 10 s power-pellet window and
+ * the last 40 ticks are the flickering warning before it ends. */
+#define TICK_DURATION_MS 50
+#define GHOST_FRIGHTENED_TICKS 200
+#define GHOST_FLICKER_TICKS 40
+#define GHOST_FRIGHTENED_MS (GHOST_FRIGHTENED_TICKS * TICK_DURATION_MS)
 
 typedef enum {
 	PACMAN_NONE = 0,
@@ -51,5 +55,6 @@ GhostStatus ghost_get_status(uint8_t ghost);
 uint8_t ghost_is_released(uint8_t ghost);
 uint8_t ghosts_collide_with_pacman(void);
 uint32_t ghosts_handle_collision(void);
+uint8_t pacman_is_frightened_mode(void);
 
 #endif

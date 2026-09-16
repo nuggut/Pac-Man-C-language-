@@ -526,6 +526,16 @@ void ghosts_update(void)
             continue;
         }
 
+        /* Frightened ghosts move 30% (0.3) slower: skip 3 out of every 10 updates */
+        if (ghosts[ghost].status == GHOST_STATUS_FLEEING ||
+            ghosts[ghost].status == GHOST_STATUS_FLICKERING) {
+            if (frightened_ticks % 10 == 3 ||
+                frightened_ticks % 10 == 6 ||
+                frightened_ticks % 10 == 9) {
+                continue;
+            }
+        }
+
         uint8_t best_row = ghosts[ghost].row;
         uint8_t best_column = ghosts[ghost].column;
         PacmanDirection best_direction = ghosts[ghost].direction;
@@ -589,7 +599,8 @@ uint8_t ghosts_collide_with_pacman(void)
     ensure_game_initialized();
 
     for (uint8_t ghost = 0; ghost < GHOST_COUNT; ghost++) {
-        if (ghosts[ghost].row == pacman_row &&
+        if (ghosts[ghost].status != GHOST_STATUS_EATEN &&
+            ghosts[ghost].row == pacman_row &&
             ghosts[ghost].column == pacman_column) {
             return 1;
         }
@@ -600,6 +611,9 @@ uint8_t ghosts_collide_with_pacman(void)
 
 uint32_t ghosts_handle_collision(void)
 {
+    uint32_t total_points = 0;
+    uint8_t normal_hit = 0;
+
     for (uint8_t ghost = 0; ghost < GHOST_COUNT; ghost++) {
         if (ghosts[ghost].row != pacman_row ||
             ghosts[ghost].column != pacman_column) {
@@ -609,21 +623,26 @@ uint32_t ghosts_handle_collision(void)
         if (ghosts[ghost].status == GHOST_STATUS_FLEEING ||
             ghosts[ghost].status == GHOST_STATUS_FLICKERING) {
             ghosts_eaten++;
-            pacman_score += 100U * ghosts_eaten;
+            /* Classic Pac-Man: 200, 400, 800, 1600 for successive ghosts */
+            uint32_t points = 200U << (ghosts_eaten - 1U);
+            pacman_score += points;
             ghosts[ghost].status = GHOST_STATUS_EATEN;
             ghosts[ghost].row = ghost_start_positions[ghost].row;
             ghosts[ghost].column = ghost_start_positions[ghost].column;
             ghosts[ghost].direction = ghost_start_positions[ghost].direction;
-            ghosts[ghost].released = 1;
-            return 100U * ghosts_eaten;
-        }
-
-        if (ghosts[ghost].status == GHOST_STATUS_NORMAL) {
-            return 0;
+            ghosts[ghost].released = 0;
+            total_points += points;
+        } else if (ghosts[ghost].status == GHOST_STATUS_NORMAL) {
+            /* A normal ghost caught Pac-Man: caller must take a life. */
+            normal_hit = 1;
         }
     }
 
-    return 0;
+    if (normal_hit) {
+        return 0;
+    }
+
+    return total_points;
 }
 
 uint32_t pacman_get_score(void)
@@ -648,4 +667,10 @@ uint8_t pacman_level_complete(void)
 {
     ensure_game_initialized();
     return pellets_remaining == 0;
+}
+
+uint8_t pacman_is_frightened_mode(void)
+{
+    ensure_game_initialized();
+    return frightened_ticks > 0;
 }

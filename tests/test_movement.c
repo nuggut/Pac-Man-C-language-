@@ -125,6 +125,49 @@ int main(void)
         return 1;
     }
 
+    /* Navigate to power pellet at (3, 1) */
+    for (int move = 0; move < 6; move++) {
+        if (!pacman_move(PACMAN_RIGHT)) return 1;
+    }
+    if (!expect_position(14, 6)) return 1;
+    for (int move = 0; move < 6; move++) {
+        if (!pacman_move(PACMAN_UP)) return 1;
+    }
+    if (!expect_position(8, 6)) return 1;
+    for (int move = 0; move < 5; move++) {
+        if (!pacman_move(PACMAN_LEFT)) return 1;
+    }
+    if (!expect_position(8, 1)) return 1;
+    for (int move = 0; move < 5; move++) {
+        if (!pacman_move(PACMAN_UP)) return 1;
+    }
+    if (!expect_position(3, 1)) return 1;
+
+    /* Verify power pellet was eaten */
+    /* Verify power pellet was eaten and ghost is fleeing */
+    if (game_get_tile(3, 1) != PACMAN_TILE_EMPTY) {
+        return 1;
+    }
+    if (ghost_get_status(0) != GHOST_STATUS_FLEEING) {
+        return 1;
+    }
+
+    /* Verify frightened ghost moves ~70% speed (skips 3 out of 10 updates) */
+    uint8_t moves = 0;
+    for (int tick = 0; tick < 10; tick++) {
+        uint8_t r1, c1, r2, c2;
+        ghost_get_position(0, &r1, &c1);
+        ghosts_update();
+        ghost_get_position(0, &r2, &c2);
+        if (r1 != r2 || c1 != c2) {
+            moves++;
+        }
+    }
+    if (moves != 7) {
+        printf("expected 7 moves in 10 ticks for frightened ghost, got %u\n", moves);
+        return 1;
+    }
+
     puts("movement tests passed");
     return 0;
 }
